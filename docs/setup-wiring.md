@@ -13,8 +13,9 @@ failure makes the setup step fail; inspect `logs/nanoclaw.error.log`.
 
 Re-running the launcher stops the recorded host from this checkout and waits
 up to 10 seconds for it to exit before starting a replacement. A stale PID
-belonging to another process is ignored. Nohup keeps the host running after the
-setup shell exits; it does not provide automatic restart or boot persistence.
+belonging to another process is ignored. The launcher uses Linux `setsid` to
+detach the host from the setup terminal so it survives that terminal exiting.
+It does not provide automatic restart or boot persistence.
 
 ### Two-DB Split (session DB write isolation)
 - Session DB split into `inbound.db` (host-owned) and `outbound.db` (container-owned)

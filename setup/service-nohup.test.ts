@@ -99,6 +99,33 @@ describe.runIf(process.platform === 'linux')('nohup service startup', () => {
     expect(oldArgs).not.toContain(path.join(host.root, 'dist/index.js'));
   });
 
+  it('keeps the host alive after the interactive terminal session exits', async () => {
+    acceptingHost();
+    await run([]);
+    const previousPid = readPid();
+    const wrapper = path.join(host.root, 'start-nanoclaw.sh');
+    const quoted = (value: string) => "'" + value.replace(/'/g, "'\\''") + "'";
+    // util-linux script starts a real controlling terminal. Its shell must
+    // exit after Node has started, not while nohup still owns the process.
+    execFileSync(
+      'script',
+      [
+        '-q',
+        '-e',
+        '-c',
+        `/bin/bash ${quoted(wrapper)} && while [ ! -S ${quoted(path.join(host.root, 'data/ncl.sock'))} ]; do sleep 0.05; done`,
+        '/dev/null',
+      ],
+      {
+        stdio: 'pipe',
+        timeout: 15_000,
+      },
+    );
+    const pid = readPid();
+    expect(pid).not.toBe(previousPid);
+    await expect(waitForNohupStartup(host.root, pid, 1000)).resolves.toBeUndefined();
+  });
+
   it.each(['missing', 'unrelated'])('rejects an existing listener with a %s PID file', async (pidState) => {
     acceptingHost();
     await run([]);

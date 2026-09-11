@@ -505,7 +505,8 @@ socket.setTimeout(1000, () => {
 `)} ${shellQuote(path.join(projectRoot, 'data', 'ncl.sock'))}`,
     '',
     'echo "Starting NanoClaw..."',
-    `nohup ${shellQuote(nodePath)} ${shellQuote(entrypoint)} \\`,
+    // Node resets the inherited SIGHUP ignore; detach from the wizard terminal.
+    `setsid nohup ${shellQuote(nodePath)} ${shellQuote(entrypoint)} \\`,
     `  >> ${shellQuote(projectRoot + '/logs/nanoclaw.log')} \\`,
     `  2>> ${shellQuote(projectRoot + '/logs/nanoclaw.error.log')} < /dev/null &`,
     `echo $! > ${shellQuote(pidFile)}`,
