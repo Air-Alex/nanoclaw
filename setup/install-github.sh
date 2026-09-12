@@ -31,7 +31,10 @@ git fetch origin channels
 echo "STEP: copy-files"
 # Publish only a complete Git result; a failed copy must remain retryable.
 (
-  [[ ! -d src/channels/github.ts ]]
+  [[ ! -d src/channels/github.ts ]] || {
+    echo "ERROR: src/channels/github.ts is a directory; refusing to copy the adapter into it" >&2
+    exit 1
+  }
   nc_copy_dir="$(mktemp -d src/channels/.github.ts.XXXXXX)"
   trap 'rm -rf -- "$nc_copy_dir"' EXIT
   if [[ -f src/channels/github.ts ]]; then

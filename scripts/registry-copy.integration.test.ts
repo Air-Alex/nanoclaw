@@ -197,4 +197,24 @@ describe('registry copy failures and retries', () => {
     expect(readFileSync(join(root, 'src/channels/index.ts'), 'utf8')).toContain("import './github.js'");
     expect(readFileSync(join(root, 'pnpm-called'), 'utf8')).toContain('run build');
   });
+
+  it('refuses a directory at the GitHub adapter path', () => {
+    mkdirSync(join(root, 'setup'));
+    copyFileSync(new URL('../setup/install-github.sh', import.meta.url), join(root, 'setup/install-github.sh'));
+    publish('src/channels/github.ts');
+    mkdirSync(join(root, 'src/channels/github.ts'));
+    put(root, 'test-bin/pnpm', '#!/bin/sh\nprintf "%s\\n" "$*" >> pnpm-called\n');
+    chmodSync(join(root, 'test-bin/pnpm'), 0o755);
+
+    const failed = spawnSync('bash', ['setup/install-github.sh'], {
+      cwd: root,
+      env: { ...env, PATH: `${join(root, 'test-bin')}:${env.PATH}` },
+      encoding: 'utf8',
+    });
+
+    expect(failed.status).not.toBe(0);
+    expect(failed.stderr).toContain('is a directory');
+    expect(readdirSync(join(root, 'src/channels/github.ts'))).toEqual([]);
+    expect(existsSync(join(root, 'pnpm-called'))).toBe(false);
+  });
 });
