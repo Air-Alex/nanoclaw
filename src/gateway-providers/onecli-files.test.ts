@@ -33,19 +33,15 @@ describe('persistent OneCLI files', () => {
     expect(fs.statSync(path.join(dir, 'onecli')).mode & 0o777).toBe(0o700);
   });
 
-  it.each(['directory', 'symlink', 'content', 'permissions'] as const)(
+  it.each(['directory', 'symlink'] as const)(
     'refuses an existing %s collision without replacing it or unrelated files',
     (collision) => {
       const file = stageOnecliFile(dir, 'ca', 'CA');
       const unrelated = path.join(dir, 'keep');
       fs.writeFileSync(unrelated, 'keep');
-      if (collision === 'permissions') fs.chmodSync(file, 0o666);
-      else if (collision === 'content') fs.writeFileSync(file, 'wrong');
-      else {
-        fs.unlinkSync(file);
-        if (collision === 'directory') fs.mkdirSync(file);
-        else fs.symlinkSync(unrelated, file);
-      }
+      fs.unlinkSync(file);
+      if (collision === 'directory') fs.mkdirSync(file);
+      else fs.symlinkSync(unrelated, file);
       const before = fs.lstatSync(file);
       expect(() => stageOnecliFile(dir, 'ca', 'CA')).toThrow(/OneCLI staged file/);
       expect(fs.lstatSync(file).ino).toBe(before.ino);
@@ -53,6 +49,19 @@ describe('persistent OneCLI files', () => {
       expect(fs.readdirSync(path.join(dir, 'onecli'))).toEqual([path.basename(file)]);
     },
   );
+
+  it.each(['content', 'permissions'] as const)('repairs an owned regular file with mismatched %s', (mismatch) => {
+    const file = stageOnecliFile(dir, 'ca', 'CA');
+    const before = fs.lstatSync(file).ino;
+    if (mismatch === 'content') fs.writeFileSync(file, 'wrong');
+    else fs.chmodSync(file, 0o600);
+
+    expect(stageOnecliFile(dir, 'ca', 'CA')).toBe(file);
+    expect(fs.readFileSync(file, 'utf8')).toBe('CA');
+    expect(fs.statSync(file).mode & 0o777).toBe(0o644);
+    expect(fs.lstatSync(file).ino).not.toBe(before);
+    expect(fs.readdirSync(path.join(dir, 'onecli'))).toEqual([path.basename(file)]);
+  });
 
   it('refuses a staged file owned by another user', () => {
     const file = stageOnecliFile(dir, 'ca', 'CA');

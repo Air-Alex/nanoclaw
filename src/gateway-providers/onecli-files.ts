@@ -39,43 +39,68 @@ export function stageOnecliFile(dataDir: string, kind: 'ca' | 'combined' | 'stub
   const digest = createHash('sha256').update(content).digest('hex');
   const destination = path.join(directory, `${kind}-${digest}${kind === 'stub' ? '' : '.pem'}`);
   const mode = kind === 'stub' ? 0o600 : 0o644;
-  const validate = () => {
+  const validate = (): boolean => {
     const stat = fs.lstatSync(destination);
-    if (!stat.isFile() || stat.uid !== directoryStat.uid || (stat.mode & 0o777) !== mode) {
-      throw new Error('OneCLI staged file has an unexpected type, owner, or permissions');
+    if (!stat.isFile() || stat.uid !== directoryStat.uid) {
+      throw new Error(`OneCLI staged file has an unexpected type or owner: ${destination}`);
     }
     const fd = fs.openSync(destination, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
     try {
-      if (fs.readFileSync(fd, 'utf8') !== content) throw new Error('OneCLI staged file content does not match');
+      return (stat.mode & 0o777) === mode && fs.readFileSync(fd, 'utf8') === content;
     } finally {
       fs.closeSync(fd);
     }
   };
   try {
-    validate();
-    return destination;
+    if (validate()) return destination;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
-  // Publish a complete file without replacing a concurrent writer's file or
-  // following a symlink. Cleanup is limited to this invocation's temp file.
+  // Publish a complete, flushed file with an atomic rename. The temporary and
+  // destination paths share a directory, so rename works on filesystems that
+  // do not support hard links (exFAT, SMB and DrvFs included). Concurrent
+  // writers publish the same content-addressed bytes. A regular file owned by
+  // this user but left incomplete or with the wrong mode is repaired for
+  // future mounts; existing bind mounts keep their old inode.
   const temporary = path.join(directory, `.pending-${randomUUID()}`);
   const fd = fs.openSync(temporary, 'wx', mode);
   try {
     try {
       fs.writeFileSync(fd, content);
       fs.fchmodSync(fd, mode);
+      fs.fsyncSync(fd);
     } finally {
       fs.closeSync(fd);
     }
-    try {
-      fs.linkSync(temporary, destination);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        fs.renameSync(temporary, destination);
+        break;
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (!['EEXIST', 'EPERM', 'ENOTEMPTY'].includes(code ?? '')) throw error;
+
+        // Windows does not replace an existing destination with rename. A
+        // concurrent valid publisher wins; an owned regular mismatch is
+        // removed and retried. validate() still refuses symlinks/directories
+        // and files owned by another user.
+        try {
+          if (validate()) return destination;
+          fs.unlinkSync(destination);
+        } catch (validationError) {
+          if ((validationError as NodeJS.ErrnoException).code !== 'ENOENT') throw validationError;
+        }
+        if (attempt === 2) throw new Error(`Could not publish OneCLI staged file: ${destination}`, { cause: error });
+      }
     }
-    validate();
+    if (!validate()) throw new Error(`OneCLI staged file validation failed after publish: ${destination}`);
     return destination;
   } finally {
-    fs.unlinkSync(temporary);
+    try {
+      fs.unlinkSync(temporary);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
   }
 }
