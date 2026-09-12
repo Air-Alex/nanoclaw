@@ -186,6 +186,13 @@ describe('retired mechanisms', () => {
     const offenders = SKILL_DOCS.filter((d) => d.text.includes('data/env')).map((d) => d.doc);
     expect(offenders).toEqual([]);
   });
+
+  it('keeps the legacy OpenCode Dockerfile guard cleanup in install and removal docs', () => {
+    const install = readFileSync(join(SKILLS_DIR, 'add-opencode', 'SKILL.md'), 'utf8');
+    const remove = readFileSync(join(SKILLS_DIR, 'add-opencode', 'REMOVE.md'), 'utf8');
+    expect(install).toContain('rm -f src/opencode-dockerfile.test.ts');
+    expect(remove).toContain('src/opencode-dockerfile.test.ts');
+  });
 });
 
 describe('add-dial ↔ add-dial-tool agent-scope duplication', () => {
