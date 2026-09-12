@@ -28,6 +28,7 @@ import './onecli.js';
 const input: GatewayProviderInput = {
   key: { installSlug: 'test', agentGroupId: 'group-1', sessionId: 'session-1' },
   groupName: 'Test group',
+  containerName: 'nanoclaw-v2-agent-group-1-session-1',
   capabilities: {
     isolationTiers: ['container'],
     admissionEnforced: true,
