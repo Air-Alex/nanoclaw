@@ -72,14 +72,6 @@ lockstep before; mismatched versions can build cleanly and fail at runtime.
 
 ### 4. Install the pin guard
 
-Installs made before the `cli-tools.json` migration carried a Dockerfile guard
-(`src/opencode-dockerfile.test.ts`) that asserts `ARG`/`RUN` lines the image no
-longer has. Drop it so an upgraded checkout does not keep a failing test:
-
-```nc:run effect:refresh
-rm -f src/opencode-dockerfile.test.ts
-```
-
 Copy the structural test that asserts the CLI manifest and SDK package stay on
 the same exact version:
 
