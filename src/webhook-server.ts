@@ -111,7 +111,7 @@ function ensureServer(): void {
 
   const port = getWebhookPort();
 
-  server = http.createServer((req, res) => {
+  const candidate = http.createServer((req, res) => {
     void (async () => {
       const url = req.url || '/';
 
@@ -160,7 +160,16 @@ function ensureServer(): void {
     })();
   });
 
-  server.listen(port, '0.0.0.0', () => {
+  // Keep the candidate as the singleton while listen is pending so concurrent
+  // registrations cannot create competing listeners. A failed listen must
+  // release that singleton, though, or later registrations can never retry.
+  server = candidate;
+  candidate.on('error', (err) => {
+    if (!candidate.listening && server === candidate) server = null;
+    log.error('Webhook server error', { port, err });
+  });
+
+  candidate.listen(port, '0.0.0.0', () => {
     log.info('Webhook server started', { port, adapters: [...routes.keys()] });
   });
 }

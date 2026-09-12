@@ -116,7 +116,12 @@ export const ONECLI_GATEWAY_CONTAINER =
 
 // Resolve when the listener starts so a late process override still wins.
 export function getWebhookPort(): number {
-  return parseInt(process.env.WEBHOOK_PORT || envConfig.WEBHOOK_PORT || '3000', 10);
+  const raw = process.env.WEBHOOK_PORT || envConfig.WEBHOOK_PORT || '3000';
+  const port = Number(raw);
+  if (!/^[1-9]\d*$/.test(raw) || !Number.isInteger(port) || port > 65_535) {
+    throw new Error(`Invalid WEBHOOK_PORT ${JSON.stringify(raw)}: expected an integer from 1 to 65535`);
+  }
+  return port;
 }
 
 // Timezone for scheduled tasks, message formatting, etc.

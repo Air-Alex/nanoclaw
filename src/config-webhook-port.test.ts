@@ -1,4 +1,5 @@
 import fs from 'fs';
+import http from 'http';
 import os from 'os';
 import path from 'path';
 
@@ -58,6 +59,68 @@ describe('WEBHOOK_PORT configuration (#2901)', () => {
 
     vi.stubEnv('WEBHOOK_PORT', '4111');
     expect(getWebhookPort()).toBe(4111);
+  });
+
+  it.each(['abc', '3000junk', '0', '-1', '65536'])(
+    'rejects invalid port %s without wedging a later registration',
+    async (invalid) => {
+      vi.stubEnv('WEBHOOK_PORT', invalid);
+      const webhook = await import('./webhook-server.js');
+      stopWebhookServer = webhook.stopWebhookServer;
+      expect(() =>
+        webhook.registerWebhookHandler('invalid-port', (_req, res) => {
+          res.end();
+        }),
+      ).toThrow(/Invalid WEBHOOK_PORT/);
+
+      const port = 21000 + Math.floor(Math.random() * 20000);
+      vi.stubEnv('WEBHOOK_PORT', String(port));
+      webhook.registerWebhookHandler('recovered-port', (_req, res) => {
+        res.end('ready');
+      });
+      await vi.waitFor(
+        async () => {
+          const response = await fetch(`http://127.0.0.1:${port}/webhook/recovered-port`, {
+            signal: AbortSignal.timeout(500),
+          });
+          expect(await response.text()).toBe('ready');
+        },
+        { timeout: 2000, interval: 25 },
+      );
+    },
+  );
+
+  it('recovers after the configured port is already in use', async () => {
+    const occupied = http.createServer();
+    await new Promise<void>((resolve) => occupied.listen(0, '0.0.0.0', resolve));
+    const address = occupied.address();
+    if (!address || typeof address === 'string') throw new Error('Expected an allocated TCP port');
+
+    vi.stubEnv('WEBHOOK_PORT', String(address.port));
+    const webhook = await import('./webhook-server.js');
+    stopWebhookServer = webhook.stopWebhookServer;
+    webhook.registerWebhookHandler('busy-port', (_req, res) => {
+      res.end('busy');
+    });
+
+    const recoveryPort = 21000 + Math.floor(Math.random() * 20000);
+    vi.stubEnv('WEBHOOK_PORT', String(recoveryPort));
+    try {
+      await vi.waitFor(
+        async () => {
+          webhook.registerWebhookHandler('recovered-port', (_req, res) => {
+            res.end('ready');
+          });
+          const response = await fetch(`http://127.0.0.1:${recoveryPort}/webhook/recovered-port`, {
+            signal: AbortSignal.timeout(500),
+          });
+          expect(await response.text()).toBe('ready');
+        },
+        { timeout: 2000, interval: 25 },
+      );
+    } finally {
+      await new Promise<void>((resolve, reject) => occupied.close((err) => (err ? reject(err) : resolve())));
+    }
   });
 
   it.each(['.env', 'late process override'])('serves HTTP on the port selected by %s', async (source) => {
