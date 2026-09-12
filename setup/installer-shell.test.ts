@@ -10,9 +10,11 @@ import { describe, expect, it } from 'vitest';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const files = readdirSync(here)
   .filter((f) => (f.endsWith('.sh') || f.endsWith('.ts')) && !f.endsWith('.test.ts'))
-  .map((f) => path.join(here, f));
+  .map((f) => path.join(here, f))
+  .concat(path.resolve(here, '../.claude/skills/init-onecli/SKILL.md'));
 
-const PIPE_TO_PATH_SHELL = /curl\b[^|\n]*\|\s*(sh|bash)\b/;
+const CURL_PIPE = /curl\b[^|\n]*\|\s*(.+)$/;
+const SYSTEM_SHELL = /^(?:sudo(?:\s+-\S+)*\s+)?\/bin\/(?:sh|bash)(?=\s|$|["'`])/;
 
 describe('setup installers', () => {
   it('pipe downloaded scripts into /bin/sh or /bin/bash, never a PATH-resolved shell', () => {
@@ -22,7 +24,9 @@ describe('setup installers', () => {
       lines.forEach((line, i) => {
         const code = line.trim();
         if (code.startsWith('#') || code.startsWith('//') || code.startsWith('*') || /^echo\b/.test(code)) return;
-        if (PIPE_TO_PATH_SHELL.test(code)) offenders.push(`${path.basename(file)}:${i + 1}: ${code}`);
+        const pipe = CURL_PIPE.exec(code);
+        if (pipe && !SYSTEM_SHELL.test(pipe[1]))
+          offenders.push(`${path.relative(path.resolve(here, '..'), file)}:${i + 1}: ${code}`);
       });
     }
     expect(offenders).toEqual([]);
