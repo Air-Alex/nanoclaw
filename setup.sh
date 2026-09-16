@@ -114,10 +114,18 @@ install_deps() {
       | sed -E 's/.*"pnpm@([^"]+)".*/\1/')
     [ -z "$pinned" ] && pinned="latest"
     log "Installing pnpm@${pinned} via npm"
-    npm install -g "pnpm@${pinned}" >> "$LOG_FILE" 2>&1 \
-      || ([ "$PLATFORM" = "linux" ] && command -v sudo >/dev/null 2>&1 \
-            && sudo npm install -g "pnpm@${pinned}" >> "$LOG_FILE" 2>&1) \
-      || true
+    if ! npm install -g "pnpm@${pinned}" >> "$LOG_FILE" 2>&1; then
+      # sudo retry can't work here (no TTY) — fall back to a user-owned prefix instead.
+      log "npm install -g failed — retrying with a user-owned prefix"
+      NPM_LOCAL_PREFIX="$HOME/.npm-global"
+      mkdir -p "$NPM_LOCAL_PREFIX"
+      if npm install -g "pnpm@${pinned}" --prefix "$NPM_LOCAL_PREFIX" >> "$LOG_FILE" 2>&1; then
+        export PATH="$NPM_LOCAL_PREFIX/bin:$PATH"
+        log "Installed pnpm@${pinned} to user-owned prefix: $NPM_LOCAL_PREFIX"
+      else
+        log "pnpm install via user-owned prefix also failed"
+      fi
+    fi
   fi
 
   # `npm install -g` writes to npm's global prefix, which isn't always on the
