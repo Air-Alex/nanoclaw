@@ -142,10 +142,20 @@ install_deps() {
       | sed -E 's/.*"pnpm@([^"]+)".*/\1/')
     [ -z "$pinned" ] && pinned="latest"
     log "Installing pnpm@${pinned} via npm"
-    npm install -g "pnpm@${pinned}" >> "$LOG_FILE" 2>&1 \
-      || ([ "$PLATFORM" = "linux" ] && command -v sudo >/dev/null 2>&1 \
-            && sudo -n npm install -g "pnpm@${pinned}" >> "$LOG_FILE" 2>&1) \
-      || true
+    if ! npm install -g "pnpm@${pinned}" >> "$LOG_FILE" 2>&1; then
+      # sudo can't prompt here (output goes to the log) — use a user-owned
+      # prefix instead. ~/.local puts pnpm in ~/.local/bin, which nanoclaw.sh
+      # and the service unit already have on PATH.
+      log "npm install -g failed — retrying with a user-owned prefix"
+      NPM_LOCAL_PREFIX="$HOME/.local"
+      if mkdir -p "$NPM_LOCAL_PREFIX" \
+          && npm install -g "pnpm@${pinned}" --prefix "$NPM_LOCAL_PREFIX" >> "$LOG_FILE" 2>&1; then
+        export PATH="$NPM_LOCAL_PREFIX/bin:$PATH"
+        log "Installed pnpm@${pinned} to user-owned prefix: $NPM_LOCAL_PREFIX"
+      else
+        log "pnpm install via user-owned prefix also failed"
+      fi
+    fi
   fi
 
   # `npm install -g` writes to npm's global prefix, which isn't always on the
