@@ -63,7 +63,7 @@ beforeEach(() => {
   }
   stub('node', 'case "$1" in --version) echo v22.0.0 ;; esac; exit 0');
   stub('sudo', 'echo "sudo $*" >> "$CALLS"; exit 1');
-  stub('npm', 'echo "npm $*" >> "$CALLS"; [ "$1" = "config" ] && { echo /usr; exit 0; }; exit 1');
+  stub('npm', 'echo "npm $*" >> "$CALLS"; [ "$1" = "config" ] && { echo "$HOME/no-such-prefix"; exit 0; }; exit 1');
 });
 
 afterEach(() => {

@@ -97,8 +97,8 @@ install_deps() {
     if ! command -v pnpm >/dev/null 2>&1; then
       local user_bin="$HOME/.local/bin"
       log "pnpm not on PATH after corepack enable — retrying into $user_bin"
-      mkdir -p "$user_bin"
-      if corepack enable --install-directory "$user_bin" pnpm >> "$LOG_FILE" 2>&1 \
+      if mkdir -p "$user_bin" >> "$LOG_FILE" 2>&1 \
+          && corepack enable --install-directory "$user_bin" pnpm >> "$LOG_FILE" 2>&1 \
           && [ -x "$user_bin/pnpm" ]; then
         export PATH="$user_bin:$PATH"
         hash -r 2>/dev/null || true
@@ -158,7 +158,11 @@ install_deps() {
   if ! command -v pnpm >/dev/null 2>&1; then
     log "pnpm not on PATH after corepack + npm fallback"
     echo "Could not install pnpm without root. Run this, then re-run setup:"
-    echo "  mkdir -p ~/.local/bin && corepack enable --install-directory ~/.local/bin pnpm"
+    if command -v corepack >/dev/null 2>&1; then
+      echo "  mkdir -p ~/.local/bin && corepack enable --install-directory ~/.local/bin pnpm"
+    else
+      echo "  npm install -g pnpm@${pinned:-<version from package.json packageManager>} --prefix ~/.local"
+    fi
     return
   fi
 
