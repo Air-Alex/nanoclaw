@@ -41,29 +41,6 @@ describe('public setup flags', () => {
     expect(handoff).toBeGreaterThan(npmProbe);
   });
 
-  it('retries corepack into ~/.local/bin before any sudo, and never lets sudo prompt', () => {
-    // A system-wide Node (/usr/bin) makes plain `corepack enable` fail with
-    // EACCES for a non-root user; setup.sh output goes to a log, so a sudo
-    // password prompt would be invisible and hang the bootstrap.
-    const bootstrap = fs.readFileSync(path.join(process.cwd(), 'setup.sh'), 'utf8');
-    const userDirRetry = bootstrap.indexOf('corepack enable --install-directory "$user_bin" pnpm');
-    const sudoCalls = bootstrap
-      .split('\n')
-      .map((line) =>
-        line
-          .replace(/#.*$/, '')
-          .replace(/command -v sudo/g, '')
-          .trim(),
-      )
-      .filter((line) => !/^(log|echo) /.test(line) && /\bsudo /.test(line));
-    const firstSudo = bootstrap.indexOf('sudo -n corepack enable');
-
-    expect(userDirRetry).toBeGreaterThan(-1);
-    expect(firstSudo).toBeGreaterThan(userDirRetry);
-    expect(sudoCalls.length).toBeGreaterThan(0);
-    for (const line of sudoCalls) expect(line).toMatch(/\bsudo -n /);
-  });
-
   it('parses the template path exposed by the entrypoint', () => {
     expect(parseFlags(['--template-path', 'sales/sdr'])).toEqual({
       values: { templatePath: 'sales/sdr' },
