@@ -85,6 +85,13 @@ install_deps() {
   # is invisible but corepack still blocks on stdin. Auto-accept.
   export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 
+  # A previous run (or the manual recovery printed below) may have left pnpm
+  # in ~/.local/bin, which a fresh login shell doesn't always have on PATH.
+  if ! command -v pnpm >/dev/null 2>&1 && [ -x "$HOME/.local/bin/pnpm" ]; then
+    export PATH="$HOME/.local/bin:$PATH"
+    log "Found pnpm in $HOME/.local/bin — prepended to PATH"
+  fi
+
   # Preferred path: enable corepack so `pnpm` shim lands on PATH.
   if command -v corepack >/dev/null 2>&1; then
     log "Enabling corepack"
@@ -137,7 +144,7 @@ install_deps() {
     log "Installing pnpm@${pinned} via npm"
     npm install -g "pnpm@${pinned}" >> "$LOG_FILE" 2>&1 \
       || ([ "$PLATFORM" = "linux" ] && command -v sudo >/dev/null 2>&1 \
-            && sudo npm install -g "pnpm@${pinned}" >> "$LOG_FILE" 2>&1) \
+            && sudo -n npm install -g "pnpm@${pinned}" >> "$LOG_FILE" 2>&1) \
       || true
   fi
 

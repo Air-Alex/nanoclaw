@@ -93,7 +93,7 @@ describe('setup.sh corepack bootstrap with a read-only global bin dir', () => {
     expect(calls()).not.toContain('npm install');
   });
 
-  it('only retries corepack under sudo non-interactively and prints the manual fix when everything fails', () => {
+  it('only ever calls sudo non-interactively and prints the manual fix when everything fails', () => {
     stub('corepack', 'echo "corepack $*" >> "$CALLS"; exit 1');
 
     const result = runBootstrap();
@@ -103,7 +103,7 @@ describe('setup.sh corepack bootstrap with a read-only global bin dir', () => {
     expect(result.stdout).toContain('corepack enable --install-directory ~/.local/bin pnpm');
     const sudoCalls = calls()
       .split('\n')
-      .filter((line) => line.startsWith('sudo ') && line.includes('corepack'));
+      .filter((line) => line.startsWith('sudo '));
     // The sudo retry is Linux-only; wherever it runs it must never prompt.
     if (process.platform === 'linux') expect(sudoCalls.length).toBeGreaterThan(0);
     for (const call of sudoCalls) expect(call).toMatch(/^sudo -n /);
