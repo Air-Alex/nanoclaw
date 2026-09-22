@@ -13,6 +13,8 @@ const mock = vi.hoisted(() => ({
   start: vi.fn(),
   stop: vi.fn(),
   image: vi.fn(),
+  clearImage: vi.fn(),
+  decided: true,
   deviceStart: vi.fn(),
   deviceFinish: vi.fn(),
   claim: vi.fn(),
@@ -106,7 +108,9 @@ vi.mock('./registry-login.js', () => ({
 vi.mock('./lib/registry-state.js', () => ({
   readRegistryAccount: mock.account,
   readImageSource: () => 'local',
+  imageSourceDecided: () => mock.decided,
   writeImageSource: mock.image,
+  clearImageSource: mock.clearImage,
 }));
 vi.mock('@clack/prompts', () => ({
   confirm: mock.confirm,
@@ -158,6 +162,7 @@ describe('browser setup handoffs', () => {
     mock.local = {};
     mock.saved = [];
     mock.options = [];
+    mock.decided = true;
     mock.account.mockReturnValue(ACCOUNT);
     mock.identity.mockResolvedValue(IDENTITY);
     mock.key.mockReturnValue(KEY);
@@ -407,19 +412,6 @@ describe('browser setup handoffs', () => {
     expect(enable).toHaveBeenCalledOnce();
   });
 
-  it('reports the image source it settled on, so the wizard can tell an answered question from one it never asked', async () => {
-    mock.confirm.mockResolvedValueOnce(false);
-    expect(await runImagePortal()).toBe('local');
-    expect(mock.image).toHaveBeenLastCalledWith('local');
-    mock.account.mockReturnValue(undefined);
-    mock.deviceFinish.mockRejectedValueOnce(new LoginError('The sign-in was declined in the browser.'));
-    expect(await runImagePortal()).toBe('local');
-    mock.account.mockReturnValue(ACCOUNT);
-    mock.result.choice.imageSource = 'hardened';
-    expect(await runImagePortal()).toBe('hardened');
-    expect(mock.image).toHaveBeenLastCalledWith('hardened');
-  });
-
   it('persists a declined reminder and never opens the browser or starts installation', async () => {
     mock.confirm.mockResolvedValue(false);
     const enable = vi.fn();
@@ -480,6 +472,22 @@ describe('browser setup handoffs', () => {
     expect(mock.local.reminders.echo).toBe(true);
   });
 
+  it('puts the question back, rather than answering it, if the late image pull fails before it was ever answered', async () => {
+    mock.decided = false;
+    mock.result.choice.imageSource = 'hardened';
+    const enable = () =>
+      runImagePortal({
+        browserConsent: true,
+        apply: async () => {
+          throw new Error('pull failed');
+        },
+      });
+    await expect(offerPortalReminder('echo', enable)).rejects.toThrow('pull failed');
+    expect(mock.image).toHaveBeenCalledExactlyOnceWith('hardened');
+    expect(mock.clearImage).toHaveBeenCalledOnce();
+    expect(mock.local.reminderPending.echo).toBe(true);
+  });
+
   it('keeps core setup running when optional perk status is temporarily unavailable', async () => {
     mock.request.mockRejectedValue(new Error('offline'));
     const enable = vi.fn();
@@ -492,7 +500,7 @@ describe('browser setup handoffs', () => {
   it('does not change or pull the image after dismissing the later browser offer', async () => {
     mock.result.status = 'skipped';
     const apply = vi.fn();
-    expect(await runImagePortal({ browserConsent: true, apply })).toBeUndefined();
+    await runImagePortal({ browserConsent: true, apply });
     expect(mock.image).not.toHaveBeenCalled();
     expect(apply).not.toHaveBeenCalled();
     expect(mock.complete).not.toHaveBeenCalled();

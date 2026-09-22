@@ -3,7 +3,13 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import * as p from '@clack/prompts';
 import { openUrl } from './lib/browser.js';
-import { readImageSource, readRegistryAccount, writeImageSource, type ImageSource } from './lib/registry-state.js';
+import {
+  clearImageSource,
+  imageSourceDecided,
+  readImageSource,
+  readRegistryAccount,
+  writeImageSource,
+} from './lib/registry-state.js';
 import { LoginError, finishDeviceFlow, startDeviceFlow, type DeviceFlow } from './registry-login.js';
 import {
   SetupClient,
@@ -242,39 +248,35 @@ export async function beginPortal(
   }
 }
 
-/**
- * Resolves to the image source this run settled on — `local` for a declined
- * or skipped handoff as much as for a browser choice — or undefined when it
- * wrote none (the later offer, with `apply`, was dismissed).
- */
 export async function runImagePortal(
   options: { browserConsent?: boolean; apply?: () => Promise<void> } = {},
-): Promise<ImageSource | undefined> {
-  const previous = readImageSource();
+): Promise<void> {
+  // "Previous" includes "not decided yet": a failed late download must put
+  // the question back, not answer it — the wizard's reminder is only for a
+  // run whose question is still open, and the retry has to reach it.
+  const previous = imageSourceDecided() ? readImageSource() : undefined;
   const client = await beginPortal('echo', 'Nano', options);
   if (!client) {
-    if (options.apply) return;
-    writeImageSource('local');
-    return 'local';
+    if (!options.apply) writeImageSource('local');
+    return;
   }
   try {
     const result = await client.wait();
     await client.reconcile();
     if (result.status === 'skipped' && options.apply) return;
-    const source = result.choice.imageSource || 'local';
-    writeImageSource(source);
+    writeImageSource(result.choice.imageSource || 'local');
     if (result.status !== 'skipped') {
       try {
         await options.apply?.();
       } catch (error) {
-        writeImageSource(previous);
+        if (previous) writeImageSource(previous);
+        else clearImageSource();
         await client.complete('failed').catch(() => {});
         throw error;
       }
       await client.complete();
     }
     p.log.success('Image choice saved. Continuing setup.');
-    return source;
   } finally {
     await client.stop();
   }

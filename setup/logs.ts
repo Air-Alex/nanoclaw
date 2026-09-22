@@ -30,26 +30,14 @@ const PROGRESS_LOG = path.join(LOGS_DIR, 'setup.log');
 export const progressLogPath = PROGRESS_LOG;
 export const stepsDir = STEPS_DIR;
 
-// Track steps that finished cleanly in this run, plus questions answered in
-// it (`decided`). Used by fail() and the sg-docker re-exec to build a
-// NANOCLAW_SKIP list when re-executing, so the retry picks up at the failing
-// step instead of redoing every step before it — and does not ask again what
-// the operator already answered.
+// Track steps that finished cleanly in this run. Used by fail() to build
+// a NANOCLAW_SKIP list when re-executing after a Claude-assisted fix, so
+// the retry picks up at the failing step instead of redoing every step
+// before it.
 const completedInRun = new Set<string>();
 
 export function completedStepNames(): string[] {
   return [...completedInRun];
-}
-
-/**
- * A question answered in this run that is not a step of its own (the portal
- * perk reminders). Recorded next to the completed steps because that list is
- * what both resume paths turn into NANOCLAW_SKIP; an answer kept only in the
- * wizard's in-memory skip set is gone by the time a resumed run reaches the
- * reminder, and the operator is asked the same thing twice.
- */
-export function decided(name: string): void {
-  completedInRun.add(name);
 }
 
 /** Wipe prior logs and write a header. Called once per fresh run (by nanoclaw.sh or as a fallback by auto.ts if invoked standalone). */
