@@ -191,6 +191,14 @@ async function main(): Promise<void> {
       .map((s) => s.trim())
       .filter(Boolean),
   );
+  // A question the operator answered in this run. The perk reminders are not
+  // steps, so the resume re-execs (fail()'s retry, sg-docker) would drop an
+  // answer kept only in `skip`; the setup log carries it into NANOCLAW_SKIP
+  // alongside the completed steps.
+  const decided = (question: 'echo-reminder' | 'slack-reminder'): void => {
+    skip.add(question);
+    setupLog.decided(question);
+  };
 
   // Offer removal when setup lands on an existing install. Skipped on every
   // resume path — both the fail() retry and the sg-docker re-exec pass
@@ -258,9 +266,10 @@ async function main(): Promise<void> {
       brandBody(dimWrap('Your assistant lives in its own sandbox. It can only see what you explicitly share.', 4)),
     );
     // Asked before the step runs, because the step is what acts on the answer.
-    // An explicit "build it here" is a decision; the perk reminder for this
-    // question is only for installs that fell back to a local build unasked.
-    if ((await chooseImageSource()) === 'local') skip.add('echo-reminder');
+    // Any answer is a decision — "build it here", a declined or skipped
+    // sign-in, a fetched image. The perk reminder for this question is only
+    // for installs that never reached it.
+    if (await chooseImageSource()) decided('echo-reminder');
     p.log.message(
       brandBody(
         dimWrap(
@@ -559,6 +568,10 @@ async function main(): Promise<void> {
           },
         }),
       );
+      // Not `decided`: the reminder journals its own answer, and it returns
+      // false both for a decline and for an offer it could not make (perk
+      // status unreachable). A resume must still be able to finish a pending
+      // accepted download, so only this process skips it.
       skip.add('echo-reminder');
     } catch (error) {
       await fail(
@@ -756,7 +769,7 @@ async function main(): Promise<void> {
     }
     // Any answer to the chooser is a decision. The perk reminder for this
     // question is only for runs that never reached the chooser.
-    skip.add('slack-reminder');
+    decided('slack-reminder');
   }
   // Deferred wire (Teams): verify passes with zero groups because the
   // platform id only exists after the first DM. Tracked here so the ENDING
@@ -773,6 +786,7 @@ async function main(): Promise<void> {
       const result = await runChannelSkillWithPreStep('slack', await resolveDisplayName(), { browserConsent: true });
       if (result !== BACK_TO_CHANNEL_SELECTION) channelChoice = 'slack';
     });
+    // Same as the Echo reminder above: the journal owns this answer.
     skip.add('slack-reminder');
   }
   // Keep the chosen agent through the later Slack offer as well. A later run
@@ -1373,8 +1387,12 @@ async function askNewTemplateAgentName(agents: readonly AgentGroup[], initialVal
  *
  * Returns having done nothing when the question is already settled, which also
  * covers `NANOCLAW_HARDENED_IMAGE=true` passed in by a packaged flow.
+ *
+ * Resolves to the source the run settled on when the question was asked —
+ * whatever the answer, including a sign-in that was skipped or did not finish
+ * — else undefined. The caller uses that to tell an answered question from one
+ * this run never reached, which is the only case the later perk reminder is for.
  */
-/** Resolves to the operator's pick when the question was asked, else undefined. */
 async function chooseImageSource(): Promise<ImageSource | undefined> {
   if (imageSourceDecided()) return;
 
@@ -1400,10 +1418,7 @@ async function chooseImageSource(): Promise<ImageSource | undefined> {
   // whose install then has no image to pull — so don't ask a question whose
   // good answer cannot be honoured.
   if (!readAgentImagePin()) return;
-  if (portalEnabled()) {
-    await runImagePortal();
-    return;
-  }
+  if (portalEnabled()) return runImagePortal();
 
   p.log.message(
     brandBody(
@@ -1457,7 +1472,7 @@ async function chooseImageSource(): Promise<ImageSource | undefined> {
   if (!loginScriptAvailable()) {
     p.log.warn(brandBody(`This copy of NanoClaw has no ${REGISTRY_LOGIN_SCRIPT} — building the sandbox here instead.`));
     writeImageSource('local');
-    return;
+    return 'local';
   }
 
   p.log.step(brandBody('Authenticating with NanoClaw…'));
@@ -1486,11 +1501,12 @@ async function chooseImageSource(): Promise<ImageSource | undefined> {
       ),
     );
     p.log.message(k.dim(`Re-run setup to try again, or check with \`${REGISTRY_STEP} -- --status\`.`));
-    return;
+    return 'local';
   }
 
   setupLog.step('registry-login', 'interactive', durationMs, {});
   p.log.success(brandBody("Authenticated. Your assistant's sandbox will be fetched, not built."));
+  return 'hardened';
 }
 
 async function askAgentProviderChoice(): Promise<string> {

@@ -407,6 +407,19 @@ describe('browser setup handoffs', () => {
     expect(enable).toHaveBeenCalledOnce();
   });
 
+  it('reports the image source it settled on, so the wizard can tell an answered question from one it never asked', async () => {
+    mock.confirm.mockResolvedValueOnce(false);
+    expect(await runImagePortal()).toBe('local');
+    expect(mock.image).toHaveBeenLastCalledWith('local');
+    mock.account.mockReturnValue(undefined);
+    mock.deviceFinish.mockRejectedValueOnce(new LoginError('The sign-in was declined in the browser.'));
+    expect(await runImagePortal()).toBe('local');
+    mock.account.mockReturnValue(ACCOUNT);
+    mock.result.choice.imageSource = 'hardened';
+    expect(await runImagePortal()).toBe('hardened');
+    expect(mock.image).toHaveBeenLastCalledWith('hardened');
+  });
+
   it('persists a declined reminder and never opens the browser or starts installation', async () => {
     mock.confirm.mockResolvedValue(false);
     const enable = vi.fn();
@@ -479,7 +492,7 @@ describe('browser setup handoffs', () => {
   it('does not change or pull the image after dismissing the later browser offer', async () => {
     mock.result.status = 'skipped';
     const apply = vi.fn();
-    await runImagePortal({ browserConsent: true, apply });
+    expect(await runImagePortal({ browserConsent: true, apply })).toBeUndefined();
     expect(mock.image).not.toHaveBeenCalled();
     expect(apply).not.toHaveBeenCalled();
     expect(mock.complete).not.toHaveBeenCalled();

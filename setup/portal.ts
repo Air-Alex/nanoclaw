@@ -3,7 +3,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import * as p from '@clack/prompts';
 import { openUrl } from './lib/browser.js';
-import { readImageSource, readRegistryAccount, writeImageSource } from './lib/registry-state.js';
+import { readImageSource, readRegistryAccount, writeImageSource, type ImageSource } from './lib/registry-state.js';
 import { LoginError, finishDeviceFlow, startDeviceFlow, type DeviceFlow } from './registry-login.js';
 import {
   SetupClient,
@@ -242,20 +242,27 @@ export async function beginPortal(
   }
 }
 
+/**
+ * Resolves to the image source this run settled on — `local` for a declined
+ * or skipped handoff as much as for a browser choice — or undefined when it
+ * wrote none (the later offer, with `apply`, was dismissed).
+ */
 export async function runImagePortal(
   options: { browserConsent?: boolean; apply?: () => Promise<void> } = {},
-): Promise<void> {
+): Promise<ImageSource | undefined> {
   const previous = readImageSource();
   const client = await beginPortal('echo', 'Nano', options);
   if (!client) {
-    if (!options.apply) writeImageSource('local');
-    return;
+    if (options.apply) return;
+    writeImageSource('local');
+    return 'local';
   }
   try {
     const result = await client.wait();
     await client.reconcile();
     if (result.status === 'skipped' && options.apply) return;
-    writeImageSource(result.choice.imageSource || 'local');
+    const source = result.choice.imageSource || 'local';
+    writeImageSource(source);
     if (result.status !== 'skipped') {
       try {
         await options.apply?.();
@@ -267,6 +274,7 @@ export async function runImagePortal(
       await client.complete();
     }
     p.log.success('Image choice saved. Continuing setup.');
+    return source;
   } finally {
     await client.stop();
   }
