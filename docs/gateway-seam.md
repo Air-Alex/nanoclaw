@@ -186,11 +186,16 @@ A gateway skill is any `.claude/skills/<name>/` directory containing a
 `gateway.json`:
 
 ```json
-{ "kind": "iron-proxy", "label": "Iron Proxy", "description": "…", "default": true }
+{ "kind": "onecli", "label": "OneCLI", "description": "…", "default": true }
 ```
 
 `setup/gateways/catalog.ts` discovers them by that file and requires exactly one
-`default`. `setup/gateways/install.ts` applies the chosen skill through the
+`default`. OneCLI is currently the default and appears first in the advanced
+setup picker; simple setup keeps it without an extra choice. Existing installs
+retain their selected gateway. Changing the manifest default can change the
+fresh-install preference later without changing provider login.
+
+`setup/gateways/install.ts` applies the chosen skill through the
 normal skill engine — same `nc:` directives, same journal — and stamps
 `NANOCLAW_GATEWAY_PROVIDER`. The skill's `scripts/detect.ts` prints `installed`
 or `absent`, which is what lets `/update-nanoclaw` recognise an install that
@@ -218,15 +223,65 @@ See [api-details.md](api-details.md) for the full mount taxonomy.
 
 Provider login prompts stay in the provider's existing `runAuth` hook. A
 provider calls `getCredentialStore()` to resolve the selected gateway's
-`scripts/credential-store.ts`; it never shells out to a named gateway.
-The gateway module exports `createCredentialStore(root)` with `has(provider)`
-and `save(provider, credential)`. Credentials are either an API key or a
-protected file from a dedicated OAuth login. The provider deletes temporary
-login files after transfer. The gateway owns storage, refresh, grants, and
-its credential-free session contribution. Missing adapters fail explicitly;
-there is no fallback to a different gateway. This changes neither setup's
-screens nor its step sequence.
+`scripts/credential-store.ts`; it never shells out to a named gateway, never
+imports a gateway's implementation files, and never reads a gateway's
+management settings. Missing adapters fail explicitly; there is no fallback to
+a different gateway. This changes neither setup's screens nor its step sequence.
 
+The store offers two ways to hand a credential to the gateway. Both come from
+the one `getCredentialStore()` call; a gateway implements the second by
+translating the caller's description into its own native record.
+
+**Provider-named** — `has(provider)` and `save(provider, credential)`. The
+gateway owns the whole description: it derives the host from the provider's
+`modelEndpoints`, picks the record name and type, and receives the provider's
+native login file, which it stores in whatever shape its own refresh
+understands. Codex uses this path; its OAuth file is stored verbatim by OneCLI
+and parsed by Iron.
+
+**Caller-described** — `connection(target)`. For a provider whose credential
+cannot be named by the provider alone. OpenCode is the case in point: one
+install may hold keys for several backends, each on a host the operator chose,
+each with its own header scheme. The target carries only the facts the provider
+owns:
+
+- `name` — one connection per name;
+- `host` — the exact DNS hostname the credential is scoped to;
+- `proxyValue` — the non-secret marker the runtime presents in place of the
+  credential, which gateways doing selective replacement match on;
+- for `kind: 'api-key'`, the `injection` header scheme;
+- for `kind: 'oauth'`, the `profile` plus the provider's public OAuth `clientId`
+  and `tokenEndpoint`.
+
+The connection has three verbs. `find()` is read-only and reports whether an
+entry exists and whether `keep()` can complete it; an entry stored for a
+different host is offered through `confirmHostChange`, and without a
+confirmation the lookup fails so a caller cannot move a credential by
+forgetting to ask. `save(value)` stores or replaces the value of the entry
+`find()` observed. `keep()` reconciles that entry with no new value. Native ids,
+the create-versus-update choice, grant mechanics, stored formats, and refresh
+scheduling never cross the seam; both writes re-read native metadata and refuse
+an entry that changed since `find()`.
+
+**The only OAuth profile is `chatgpt`.** Every installed gateway can hold
+OpenAI's ChatGPT subscription login — refresh at a public token endpoint with a
+public client id, a bearer access token, and an account id the gateway presents
+in its own header — and nothing else. The seam names that profile rather than
+describing OAuth in general; a gateway rejects any other profile. OneCLI stores
+it as its native `openai` record, re-encoding OpenCode's parsed login into the
+Codex file shape that record expects. Iron stores it as a token broker plus a
+separate account-header secret. Parsing a provider's own login file stays in
+the provider; converting to a gateway's storage format stays in the gateway.
+
+`modelEndpoint(url)` is the one network hook. It validates an endpoint before
+setup prompts for anything, and its `configure()` routes the endpoint through
+the gateway once prompts complete. Iron uses it to permit the model host in its
+front proxy — needed even for a keyless local model, which creates no
+credential — and to refuse plaintext endpoints early. OneCLI declares nothing.
+
+`PROVIDER_CREDENTIAL_CONNECTION_SEAM_VERSION` gates a provider skill whose
+install needs `connection()`; an older core's store lacks it and the skill must
+refuse before copying any payload.
 
 ## Account connection is separate from request approval
 
@@ -246,7 +301,6 @@ provide a single-use account onboarding link; this contract does not pretend it 
 OneCLI can return its configured `ONECLI_CONSOLE_URL`; native connect_url responses
 remain valid. No dashboard location is guessed from an API server address.
 
-
 ### Operator-approved REST reads
 
 `NANOCLAW_GATEWAY_READ_ONLY_HOSTS` is a comma-separated list of exact API
@@ -264,7 +318,6 @@ match. Changing `.env` applies to subsequent requests; restart the host when
 changing a process-environment override. OneCLI's explicit native policy holds
 remain authoritative.
 
-
 ### Approval presentation
 
 Gateways may supply `summary` with `agent`, `action`, `resource`, `reason`,
@@ -275,7 +328,7 @@ closed. These fields are display-only and cannot alter authorization.
 
 Adapters must supply only safe display metadata: no raw request bodies,
 headers, credentials or query strings. OneCLI uses its native action summary
-when available; raw body previews are not forwarded. Iron reuses the same pinned OneCLI summarizer, including its application registry
+when available; raw body previews are not forwarded. Iron’s NanoClaw front reuses the same pinned OneCLI summarizer, including its application registry
 and generic fallback. HTTP POST alone is not evidence of a specific write action.
 The common card states that approval applies to one request and does not
 connect an account or expand credential permissions.
@@ -288,9 +341,16 @@ own per-site descriptions or special cases. Both installed adapters normalize
 OneCLI-shaped summaries through `normalizeGatewayApprovalSummary` and use the
 same renderer. Identity validation, routing and decisions remain core-owned.
 
-OneCLI supplies its native summary. Iron runs the same pinned OneCLI summary
-modules and provider registry inside its own trusted boundary, before credential
-injection. Its helper receives a 16 KiB body prefix and no authorization headers;
+OneCLI supplies its native summary. The Iron adapter runs the same pinned OneCLI summary
+modules and provider registry inside its NanoClaw-owned approval front, before
+forwarding approved requests to unmodified upstream Iron for credential injection.
+The front authenticates session identities and checks every request inside HTTPS
+tunnels. Only explicit continue decisions are accepted; bridge outages, malformed
+responses, timeouts and session revocation fail closed. Iron listens only on
+loopback in the same container, with dial-time loopback restrictions preventing
+backend access through DNS aliases. Control-plane sync cannot replace the front.
+Credentialed application traffic uses HTTPS; the Iron adapter preserves the
+request scheme and rejects plaintext HTTP rather than treating it as HTTPS. Its helper receives a 16 KiB body prefix and no authorization headers;
 only the resulting summary crosses the approval channel. The original request
 stream is preserved. The source is checksum-verified, its upstream tests run in
 the image build, and a version mismatch against OneCLI's gateway pin fails the
