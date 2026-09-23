@@ -11,6 +11,51 @@ This document is the contract. For which gateways exist and how one gets
 installed, see [skills-model.md](skills-model.md) and the `/add-<gateway>`
 skills.
 
+## Migrating an existing installation
+
+**Detect.** This migration applies when updating an installation that previously
+used the built-in OneCLI integration, or a fork with custom gateway wiring.
+Check `src/gateway-providers/installed.ts` for the selected gateway's registration
+import and confirm the imported implementation exists. Startup errors such as
+`No gateway provider is registered in this build` also indicate missing
+materialization. A saved `NANOCLAW_GATEWAY_PROVIDER` value alone is insufficient.
+
+**Why.** Core now ships the gateway contract rather than a built-in OneCLI
+implementation. The gateway skill installs its adapter, dependencies,
+registration, and agent instructions. Missing or unavailable gateways fail
+closed; the host does not fall back to unrestricted network access.
+
+**Fix.** Prefer `/update-nanoclaw`: its staged upgrade detects the existing
+selection and applies that gateway's skill before cutover. OneCLI remains the
+fresh simple-setup default; an existing selection is preserved.
+
+For a manual merge, record the pre-merge revision and back up local configuration
+and mutable state before changing the installation. Stop this copy's host and
+agent containers before replacing live source. After merging, apply
+[/add-onecli](../.claude/skills/add-onecli/SKILL.md) for an existing OneCLI install,
+or the skill for the gateway already selected. Preserve its existing connection
+settings and credentials. Record the matching `NANOCLAW_GATEWAY_PROVIDER` in
+`.env` after installation succeeds. Do not switch gateways merely to complete
+an upgrade. Forks with custom adapters must implement and register the current
+contract described below.
+
+**Verify.** Complete the selected skill's build and validation steps. Confirm its
+registration import and implementation are present and match the saved selection.
+Restart this copy, check host logs for successful gateway initialization, and send
+a message through an existing agent. Verify a credentialed read and an action
+that the gateway policy holds for human approval; confirm the approval reaches
+the expected operator and its decision returns to the request. Do not treat a
+successful build alone as validation of live credentials or approval delivery.
+
+**Rollback.** For a transactional update, use the retained transaction's rollback:
+`pnpm exec tsx scripts/update-nanoclaw.ts rollback --id <transaction-id>`.
+For a manual merge, stop the updated host and its agent containers, restore the
+pre-merge source and matching saved configuration and mutable state, reinstall
+its locked dependencies, build, and restart. If installation changed an external
+gateway version, restore that component separately using its recorded pre-upgrade
+version and backup; Git rollback does not restore an external vault. Do not delete
+shared gateway credentials as part of rollback.
+
 ## Why a seam and not a dependency
 
 The gateway is the single most security-relevant dependency in the system and
