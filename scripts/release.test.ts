@@ -36,6 +36,43 @@ describe('release metadata', () => {
     );
   });
 
+  it('carries the categorized 2.4-style entry through whole: lead paragraph, headings and every bullet', () => {
+    const categorized = `# Changelog
+
+## [Unreleased]
+
+## [2.4.0] - 2026-09-23
+
+NanoClaw 2.4.0 adds things.
+
+### ⚠️ Before you update
+
+- [BREAKING] **Forks must act.** Run \`/add-onecli\`.
+
+### ✨ New
+
+- **A feature.** Detail.
+
+## [2.3.0] - 2026-08-20
+
+- Previous change.
+`;
+    const section = verifyRelease({ changelog: categorized, packageVersion: '2.4.0', version: '2.4.0' });
+    expect(section.startsWith('NanoClaw 2.4.0 adds things.')).toBe(true);
+    expect(section).toContain('### ⚠️ Before you update');
+    expect(section).toContain('- [BREAKING] **Forks must act.** Run `/add-onecli`.');
+    expect(section.endsWith('- **A feature.** Detail.')).toBe(true);
+    expect(section).not.toContain('2.3.0');
+  });
+
+  it('keeps the shipped 2.4.0 entry in the categorized shape with both breaking lines inline', () => {
+    const notes = changelogSection(repositoryChangelog, '2.4.0');
+    expect(notes.startsWith('NanoClaw 2.4.0 adds')).toBe(true);
+    expect(notes.indexOf('### ⚠️ Before you update')).toBeLessThan(notes.indexOf('### ✨ New'));
+    expect(notes.split('\n').filter((line) => line.includes('[BREAKING]'))).toHaveLength(2);
+    expect(notes).not.toMatch(/#\d{3,}/);
+  });
+
   it('requires the package version to match', () => {
     expect(() => verifyRelease({ changelog, packageVersion: '2.1.53', version: '2.1.54' })).toThrow('does not match');
   });
