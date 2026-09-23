@@ -4,6 +4,8 @@ All notable changes to NanoClaw will be documented in this file.
 
 ## [Unreleased]
 
+- **`ncl approvals` and `ncl dropped-messages` now list every value the host writes.** `--status` help and validation include `awaiting_reason` (the "Reject with reason…" hold), and `--reason` includes `unknown_sender_decline_notify`; the reason list is derived from the unknown-sender policy list, so a new policy shows up in the CLI automatically.
+
 ## [2.4.0] - 2026-09-23
 
 NanoClaw 2.4.0 adds credential gateways installed through skills (OneCLI stays the default, Iron Proxy is new), community-portal setup for Echo's hardened image and a managed Slack app, install-wide and per-group model and speed controls, a Mattermost channel, and a reworked OpenCode provider. Agents now receive all of their capability instructions, replies stay in the thread they answer, and host restarts and `/update-nanoclaw` are more reliable. The default Claude model moves to Opus 5.5 and new Codex threads to `gpt-6-astra`, so check the section below before you update.
