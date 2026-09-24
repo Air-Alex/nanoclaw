@@ -119,8 +119,8 @@ describe('buildSystemPromptAddendum — reading messages', () => {
     expect(prompt).toContain('## Reading messages');
     expect(prompt).toContain('<cross-session-context>');
     expect(prompt).toContain('<dm-history>');
-    expect(prompt).toContain('Background only');
-    expect(prompt).toContain("ask — don't assume");
+    expect(prompt).toContain('Its `from` says which');
+    expect(prompt).toContain('ask.');
     expect(prompt.indexOf('## Sending messages')).toBeLessThan(prompt.indexOf('## Reading messages'));
   });
 
