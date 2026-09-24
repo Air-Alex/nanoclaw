@@ -4,7 +4,7 @@ All notable changes to NanoClaw will be documented in this file.
 
 ## [Unreleased]
 
-- **`ncl approvals` and `ncl dropped-messages` now list every value the host writes.** `--status` help and validation include `awaiting_reason` (the "Reject with reason…" hold), and `--reason` includes `unknown_sender_decline_notify`; the reason list is derived from the unknown-sender policy list, so a new policy shows up in the CLI automatically.
+- **`ncl approvals help` and `ncl dropped-messages help` now list every value the host writes.** The `status` values include `awaiting_reason` (the "Reject with reason…" hold) and the `reason` values include `unknown_sender_decline_notify`; the reason list is derived from the unknown-sender policy list, so a new policy shows up in the help automatically. List filters are not checked against these lists (they never were), so existing `--status` and `--reason` queries behave as before.
 
 ## [2.4.0] - 2026-09-23
 
