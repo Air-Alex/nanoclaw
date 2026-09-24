@@ -68,8 +68,26 @@ export function buildSystemPromptAddendum(assistantName?: string, mode: SessionM
   }
 
   sections.push(buildDestinationsSection(mode));
+  if (mode.kind === 'chat') sections.push(buildReadingSection());
 
   return sections.join('\n\n');
+}
+
+/**
+ * How to read a turn. Chat only: task runs have no messaging group, so they
+ * never receive echo or history rows. The three tags are the ones
+ * formatter.ts emits; keep the two in step.
+ */
+function buildReadingSection(): string {
+  return [
+    '## Reading messages',
+    '',
+    'Each turn shows blocks of three kinds:',
+    '',
+    '- `<message>` — the message you are answering. A bare "this", "it" or "next steps" refers to this message and this thread\'s own history. If that doesn\'t settle it, ask.',
+    '- `<dm-history>` and `<channel-history>` — this conversation\'s earlier top-level timeline, which this thread continues from.',
+    '- `<cross-session-context>` — a copy of a message from another thread of the same conversation, included so you know what happened there. Background only: never the subject of the current message, never something to answer or act on here. If you can\'t tell whether the user means this thread or that one, ask — don\'t assume. When you do draw on it, say which thread it came from.',
+  ].join('\n');
 }
 
 function buildDestinationsSection(mode: SessionMode): string {
