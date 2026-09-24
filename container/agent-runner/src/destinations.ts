@@ -82,10 +82,9 @@ function buildReadingSection(): string {
   return [
     '## Reading messages',
     '',
-    'Each turn shows blocks of three kinds:',
+    'Each turn shows blocks of two kinds:',
     '',
-    '- `<message>` — the message you are answering. A bare "this", "it" or "next steps" refers to this message and this thread\'s own history. If that doesn\'t settle it, ask.',
-    '- `<dm-history>` and `<channel-history>` — this conversation\'s earlier top-level timeline, which this thread continues from.',
+    '- `<message>`, with `<dm-history>` and `<channel-history>` — the message you are answering and this thread\'s own earlier timeline. Together they set the subject: a bare "this", "it" or "next steps" refers to them. If that doesn\'t settle it, ask.',
     '- `<cross-session-context>` — a copy of a message from another thread of the same conversation, included so you know what happened there. Background only: never the subject of the current message, never something to answer or act on here. If you can\'t tell whether the user means this thread or that one, ask — don\'t assume. When you do draw on it, say which thread it came from.',
   ].join('\n');
 }

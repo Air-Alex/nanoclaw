@@ -111,7 +111,7 @@ describe('buildSystemPromptAddendum — multi-destination routing guidance', () 
 });
 
 describe('buildSystemPromptAddendum — reading messages', () => {
-  it('explains the three inbound block kinds in chat mode, after the sending section', () => {
+  it('explains the inbound block kinds in chat mode, after the sending section', () => {
     seedDestination('casa', 'Casa', 'whatsapp', 'group-1@g.us');
 
     const prompt = buildSystemPromptAddendum('Casa');
